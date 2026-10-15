@@ -1,0 +1,106 @@
+# CI-gated bounty verification.
+#
+# The verdict consumed by the on-chain oracle is the set of check-runs this
+# workflow produces. The job IDs below MUST stay in sync with REQUIRED_JOBS in
+# the main project's `oracle/source.js`:
+#
+#     protect-tests, gitleaks, trivy, tests
+#
+# A payout is only authorised when all four jobs report `success` (exit code 0)
+# from the `github-actions` app on the pull request's head commit.
+#
+# NOTE ON THE SECURITY BOUNDARY: `pull_request` runs the workflow from the pull
+# request's merge commit, so a malicious PR can edit this file. The real security
+# boundary is the on-chain oracle, which rejects any PR that touches `tests/` or
+# `.github/` (verification bit 0x20). The `protect-tests` job below is a
+# best-effort second line of defence.
+
+name: bounty-verification
+
+on:
+  pull_request:
+    branches: [main]
+
+# Least privilege: the workflow only ever needs to read the repository.
+permissions:
+  contents: read
+
+jobs:
+  protect-tests:
+    name: protect-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Fail if /tests or /.github were modified
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_REF"
+          changed="$(git diff --name-only "origin/$BASE_REF...HEAD")"
+          echo "Changed files:"
+          echo "$changed"
+          if echo "$changed" | grep -qE '^(tests/|\.github/)'; then
+            echo "::error::Changes to /tests or /.github are not allowed for a bounty PR."
+            exit 1
+          fi
+
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Scan the diff and history for secrets
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # The token is read-only on fork PRs, so don't try to post comments.
+          GITLEAKS_ENABLE_COMMENTS: "false"
+
+  trivy:
+    name: trivy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Scan the filesystem for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+  tests:
+    name: tests
+    needs: [protect-tests, gitleaks, trivy]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Restore the protected tests from the base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_REF"
+          git checkout "origin/$BASE_REF" -- tests/
+
+      - name: Run the test suite with networking disabled
+        run: |
+          docker run --rm --network none \
+            -v "$PWD:/app" -w /app \
+            node:22-alpine node --test

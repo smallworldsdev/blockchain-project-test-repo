@@ -1,0 +1,27 @@
+{
+  "name": "textkit",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A tiny, dependency-free text utility library. Demo target repo for the CI-gated trustless bounty payout system.",
+  "type": "module",
+  "main": "src/textkit.js",
+  "exports": {
+    ".": "./src/textkit.js"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "keywords": [
+    "slugify",
+    "text",
+    "utilities",
+    "demo"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  }
+}

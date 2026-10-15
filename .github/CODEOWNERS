@@ -1,0 +1,9 @@
+# Protected paths for the CI-gated bounty system.
+#
+# A pull request that changes any of these paths requests a review from the
+# listed owner. Combined with branch protection this is a second line of
+# defence; the on-chain oracle independently rejects any PR that touches
+# `tests/` or `.github/` (the "Protected paths untouched" verification check).
+
+/tests/    @smallworldsdev
+/.github/  @smallworldsdev

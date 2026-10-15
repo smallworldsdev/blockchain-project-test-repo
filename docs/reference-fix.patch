@@ -1,0 +1,12 @@
+--- a/src/textkit.js
++++ b/src/textkit.js
+@@ -20,7 +20,8 @@
+ export function slugify(text) {
+   return String(text)
+     .toLowerCase()
+-    .replace(/\s+/g, '-');
++    .replace(/[^a-z0-9]+/g, '-')
++    .replace(/^-+|-+$/g, '');
+ }
+ 
+ /**
